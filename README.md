@@ -42,6 +42,9 @@ Edit `Main.java`:
   Wysteri attacks twice and can apply one singleton, resistable Weaken per
   first turn. `WYSTERI_WEAKEN_RUNES` adds 5% chance per rune (0-2), stacking
   with Sniper's 80% base chance; one rune and Sniper yield 85%.
+- Potential future debuffer options to evaluate: Nethril, Esme the Dancer,
+  Basim Ibn Ishaq, Cruetraxa, Karato Foxhunter, Turvold, and Zinogre
+  Blademaster. These champions are not implemented as selectable debuffers yet.
 - `GEAR_SETUPS` compares gear-set assignments by team position. A champion can
   wear only one gear-set type, but different champions may use different sets
   in the same setup. Daze is modeled only for Hellhound in the sleeper position.
