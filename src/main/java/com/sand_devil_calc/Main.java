@@ -73,7 +73,7 @@ public class Main {
                 }
             }
             
-            damageReduction = Math.max(1 - 0.15 * (hellhoundDebuffs + mithralaDebuffs), 0); // Calculate damage reduction based on total debuffs
+            damageReduction *= Math.max(1 - 0.15 * (hellhoundDebuffs + mithralaDebuffs), 0); // Apply debuff reduction to the starting 75% reduction
 
             feralDamageDealtArray.add((1 - damageReduction * Math.max(1 - 0.15 * (hellhoundDebuffs + mithralaDebuffs), 0)) * (1 + 0.05 * mithralaDebuffs)); // If feral, increase damage taken by 5% for each debuff
             toxicDamageDealtArray.add(1 - damageReduction * Math.max(1 - 0.15 * (hellhoundDebuffs + mithralaDebuffs + ifToxicDebuffs), 0)); // If toxic, just use the calculated damage reduction
