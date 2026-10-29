@@ -35,7 +35,13 @@ Edit `Main.java`:
   and two damage dealers. Mikage is present but disabled; her 50% Attack buff,
   30% increased-damage buff, and ordered ally attack are deferred until
   champion damage is modeled. Enabling her currently raises an explicit error.
-- Change `DEBUFFER_KIND` between `MITHRALA` and `ATHEL`.
+- Change `DEBUFFER_KIND` between `MITHRALA`, `DOROTHY`, and
+  `WYSTERI_VINEGUARD`. Athel is currently excluded from selectable
+  configurations because weak-affinity attacks can fail. Dorothy attacks once
+  and can apply a resistable Weaken; her Smite level is five stars by default.
+  Wysteri attacks twice and can apply one singleton, resistable Weaken per
+  first turn. `WYSTERI_WEAKEN_RUNES` adds 5% chance per rune (0-2), stacking
+  with Sniper's 80% base chance; one rune and Sniper yield 85%.
 - `GEAR_SETUPS` compares gear-set assignments by team position. A champion can
   wear only one gear-set type, but different champions may use different sets
   in the same setup. Daze is modeled only for Hellhound in the sleeper position.
@@ -60,8 +66,10 @@ Edit `Main.java`:
   singleton across both sources.
 - `MITHRALA_SPOREBURST_ROD_ENABLED` toggles the relic;
   its star level sets the extra-poison chance from 10% at 1 star to 35% at 6.
-- `MITHRALA_SMITE_ENABLED` and `MITHRALA_SMITE_STARS` configure Smite. Stars
-  2 and 4 use the same chances as 1 and 3, respectively.
+- `DEBUFFER_SMITE_ENABLED` and `DEBUFFER_SMITE_STARS` configure Smite for
+  Mithrala or Dorothy. Wysteri does not have Smite. Dorothy defaults to five
+  stars; Mithrala defaults to three. Stars 2 and 4 use the same chances as 1
+  and 3, respectively.
 - Adjust each champion's accuracy and `BOSS_RESISTANCE` to calculate the
   accuracy/resistance failure chance using the supplied spreadsheet formula.
 - Change `SIMULATION_COUNT` or `RANDOM_SEED` to control the trial count and
@@ -71,10 +79,12 @@ The simulator processes one first-turn sequence only; it does not run an
 additional team pass after an ally attack. Mikage's ally attack is not enabled
 or included yet. Champion damage per hit defaults to `1.0`, so damage is
 currently normalized. Sleep-failed runs are reported separately and excluded
-from average damage, standard deviation, and debuff statistics. These
-statistics are calculated only across successful runs. An Athel Weaken
-landing increases modeled damage by 25%; Feral adds 5% for each debuff that
-its wearer successfully applies, including Toxic and relic debuffs.
+from damage and debuff statistics. Debuff statistics are calculated only
+across completed runs. Runs where Athel fails a weak-affinity attack (35%
+chance on each hit) end immediately and contribute zero damage to the damage
+average and standard deviation, but remain in those damage statistics.
+Dorothy or Wysteri Weaken increases modeled damage by 25%; Feral adds 5% for each
+debuff that its wearer successfully applies, including Toxic and relic debuffs.
 
 Every landed debuff contributes to one count in the boss formula:
 `1 - 0.75 * max(1 - 0.15 * numberOfDebuffsLanded, 0)^2`.

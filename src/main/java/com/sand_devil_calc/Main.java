@@ -12,7 +12,8 @@ public class Main {
     private static final double DEFAULT_CHAMPION_ACCURACY = BOSS_RESISTANCE + 114;
     // private static final long BOSS_MAX_HP = 3_100_000; // Not modeled yet.
     // private static final int BOSS_DEFENSE = 3_587; // Not modeled yet.
-    private static final ChampionKind DEBUFFER_KIND = ChampionKind.MITHRALA;
+    // Athel is excluded from selectable configurations because weak affinity makes her unreliable.
+    private static final ChampionKind DEBUFFER_KIND = ChampionKind.WYSTERI_VINEGUARD;
     private static final boolean FAIL_RUN_WITHOUT_SLEEP = true;
     private static final boolean ASSUME_HELLHOUND_SLEEP_LANDS = true;
     private static final Set<TeamPosition> FEARSOME_PRESENCE_POSITIONS = Set.of();
@@ -22,10 +23,14 @@ public class Main {
     );
     private static final boolean HELLHOUND_HARVEST_DESPAIR_ENABLED = true;
     private static final boolean HELLHOUND_HARVEST_DESPAIR_SNIPER_ENABLED = false;
-    private static final boolean MITHRALA_SPOREBURST_ROD_ENABLED = true;
+    private static final boolean MITHRALA_SPOREBURST_ROD_ENABLED =
+            DEBUFFER_KIND == ChampionKind.MITHRALA;
     private static final int MITHRALA_SPOREBURST_ROD_STARS = 4;
-    private static final boolean MITHRALA_SMITE_ENABLED = true;
-    private static final int MITHRALA_SMITE_STARS = 3;
+    private static final boolean DEBUFFER_SMITE_ENABLED =
+            DEBUFFER_KIND == ChampionKind.MITHRALA || DEBUFFER_KIND == ChampionKind.DOROTHY;
+    private static final int DEBUFFER_SMITE_STARS = DEBUFFER_KIND == ChampionKind.DOROTHY ? 5 : 3;
+    private static final int WYSTERI_WEAKEN_RUNES =
+            DEBUFFER_KIND == ChampionKind.WYSTERI_VINEGUARD ? 1 : 0;
 
     private static final Team TEAM = new Team(Map.of(
             TeamPosition.ALLY_ATTACKER,
@@ -69,13 +74,9 @@ public class Main {
     ));
 
     private static final List<GearSetup> GEAR_SETUPS = List.of(
-            new GearSetup("Hellhound Toxic / Mithrala Toxic", Map.of(
-                    TeamPosition.SLEEPER, GearSet.TOXIC,
+            new GearSetup("Hellhound Daze / " + TEAM.at(TeamPosition.DEBUFFER).name() + " Toxic", Map.of(
+                    TeamPosition.SLEEPER, GearSet.DAZE,
                     TeamPosition.DEBUFFER, GearSet.TOXIC
-            )),
-            new GearSetup("Hellhound Toxic / Mithrala Feral", Map.of(
-                    TeamPosition.SLEEPER, GearSet.TOXIC,
-                    TeamPosition.DEBUFFER, GearSet.FERAL
             ))
     );
 
@@ -89,8 +90,9 @@ public class Main {
             HELLHOUND_HARVEST_DESPAIR_SNIPER_ENABLED,
             MITHRALA_SPOREBURST_ROD_ENABLED,
             MITHRALA_SPOREBURST_ROD_STARS,
-            MITHRALA_SMITE_ENABLED,
-            MITHRALA_SMITE_STARS
+            DEBUFFER_SMITE_ENABLED,
+            DEBUFFER_SMITE_STARS,
+            WYSTERI_WEAKEN_RUNES
     );
 
     private static final DamageModel BOSS_DAMAGE_MODEL = new DamageModel(0.75, 0.15);
@@ -130,9 +132,10 @@ public class Main {
         System.out.println("Mithrala Sporeburst Rod: "
                 + MITHRALA_SPOREBURST_ROD_ENABLED
                 + " (" + MITHRALA_SPOREBURST_ROD_STARS + " stars)");
-        System.out.println("Mithrala Smite: "
-                + MITHRALA_SMITE_ENABLED + " (" + MITHRALA_SMITE_STARS
-                + " stars; applies only when Mithrala is selected)");
+        System.out.println("Debuffer Smite: "
+                + DEBUFFER_SMITE_ENABLED + " (" + DEBUFFER_SMITE_STARS
+                + " stars; applies only to eligible debuffers)");
+        System.out.println("Wysteri Weaken runes: " + WYSTERI_WEAKEN_RUNES);
 
         for (GearSetup setup : GEAR_SETUPS) {
             SimulationResult result = simulator.run(
@@ -156,16 +159,28 @@ public class Main {
                     1.0,
                     DEFAULT_CHAMPION_ACCURACY
             );
-            case ATHEL -> new Champion(
-                    "Athel",
-                    ChampionKind.ATHEL,
+            case ATHEL -> throw new IllegalArgumentException(
+                    "Athel is excluded from selectable configurations due to weak affinity."
+            );
+            case DOROTHY -> new Champion(
+                    "Dorothy",
+                    ChampionKind.DOROTHY,
                     true,
-                    3,
+                    1,
+                    1.0,
+                    DEFAULT_CHAMPION_ACCURACY
+            );
+            case WYSTERI_VINEGUARD -> new Champion(
+                    "Wysteri Vineguard",
+                    ChampionKind.WYSTERI_VINEGUARD,
+                    true,
+                    2,
                     1.0,
                     DEFAULT_CHAMPION_ACCURACY
             );
             default -> throw new IllegalArgumentException(
-                    "Debuffer must be Mithrala or Athel: " + DEBUFFER_KIND
+                    "Debuffer must be Mithrala, Dorothy, or Wysteri Vineguard: "
+                            + DEBUFFER_KIND
             );
         };
     }
@@ -179,17 +194,23 @@ public class Main {
                 (double) result.sleepFailedTrials() / result.trials() * 100
         );
         System.out.printf(
+                "Weak-affinity failures: %,d / %,d (%.2f%%)%n",
+                result.affinityFailedTrials(),
+                result.trials(),
+                (double) result.affinityFailedTrials() / result.trials() * 100
+        );
+        System.out.printf(
                 "Successful runs: %,d / %,d (%.2f%%)%n",
                 result.successfulTrials(),
                 result.trials(),
                 result.successRate() * 100
         );
-        if (result.successfulTrials() == 0) {
-            System.out.println("No successful runs; damage and debuff averages are unavailable.");
+        if (result.damageSampleTrials() == 0) {
+            System.out.println("No runs passed the sleep gate; damage and debuff averages are unavailable.");
             return;
         }
         System.out.printf(
-                "Average potential damage per successful run: %.4f (%.2f%% of unmitigated baseline)%n",
+                "Average potential damage per damage sample: %.4f (%.2f%% of unmitigated baseline)%n",
                 result.averageDamagePerCycle(),
                 result.averageDamageMultiplier() * 100
         );
@@ -210,6 +231,10 @@ public class Main {
                 (averageDamageMultiplier - 3 * standardDeviationMultiplier) * 100,
                 (averageDamageMultiplier + 3 * standardDeviationMultiplier) * 100
         );
+        if (result.successfulTrials() == 0) {
+            System.out.println("No runs completed; debuff statistics are unavailable.");
+            return;
+        }
         System.out.printf("Average landed debuffs: %.4f%n", result.averageDebuffs());
         System.out.println("Landed-debuff-count probabilities:");
 

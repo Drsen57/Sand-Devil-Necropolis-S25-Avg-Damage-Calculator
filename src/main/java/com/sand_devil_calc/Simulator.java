@@ -14,7 +14,8 @@ public class Simulator {
     private static final double HARVEST_DESPAIR_PROC_CHANCE = 0.60;
     private static final double HARVEST_DESPAIR_SNIPER_PROC_CHANCE = 0.65;
     private static final double FERAL_DAMAGE_PER_DEBUFF = 0.05;
-    private static final double ATHEL_WEAKEN_DAMAGE_BONUS = 0.25;
+    private static final double WEAKEN_DAMAGE_BONUS = 0.25;
+    private static final double ATHEL_WEAK_AFFINITY_FAILURE_CHANCE = 0.35;
 
     private final DamageModel damageModel;
 
@@ -81,21 +82,32 @@ public class Simulator {
         double sumSquaredDamageDeviations = 0;
         long totalDebuffs = 0;
         long successfulTrials = 0;
+        long sleepFailedTrials = 0;
+        long affinityFailedTrials = 0;
+        long damageSampleTrials = 0;
         Map<Integer, Long> debuffCounts = new HashMap<>();
 
         for (long trial = 0; trial < trials; trial++) {
             TrialState state = runTrial(team, setup, options, random);
-            if (state.failed) {
+            if (state.sleepFailed) {
+                sleepFailedTrials++;
                 continue;
             }
 
-            double trialDamage = calculateDamage(baseDamagePerCycle, state, setup);
-            successfulTrials++;
+            damageSampleTrials++;
+            double trialDamage;
+            if (state.affinityFailed) {
+                affinityFailedTrials++;
+                trialDamage = 0;
+            } else {
+                successfulTrials++;
+                trialDamage = calculateDamage(baseDamagePerCycle, state, setup);
+                totalDebuffs += state.debuffsLanded;
+                debuffCounts.merge(state.debuffsLanded, 1L, Long::sum);
+            }
             double deltaFromAverage = trialDamage - averageDamage;
-            averageDamage += deltaFromAverage / successfulTrials;
+            averageDamage += deltaFromAverage / damageSampleTrials;
             sumSquaredDamageDeviations += deltaFromAverage * (trialDamage - averageDamage);
-            totalDebuffs += state.debuffsLanded;
-            debuffCounts.merge(state.debuffsLanded, 1L, Long::sum);
         }
 
         Map<Integer, Double> probabilities = new HashMap<>();
@@ -110,9 +122,12 @@ public class Simulator {
                 setup.name(),
                 trials,
                 successfulTrials,
+                sleepFailedTrials,
+                affinityFailedTrials,
+                damageSampleTrials,
                 baseDamagePerCycle,
                 averageDamage,
-                successfulTrials == 0 ? 0 : Math.sqrt(sumSquaredDamageDeviations / successfulTrials),
+                damageSampleTrials == 0 ? 0 : Math.sqrt(sumSquaredDamageDeviations / damageSampleTrials),
                 successfulTrials == 0 ? 0 : (double) totalDebuffs / successfulTrials,
                 probabilities
         );
@@ -131,7 +146,7 @@ public class Simulator {
             Champion champion = team.at(position);
             if (!champion.enabled()) {
                 if (position == TeamPosition.SLEEPER && options.failRunWithoutSleep()) {
-                    state.failed = true;
+                    state.sleepFailed = true;
                     return state;
                 }
                 continue;
@@ -139,6 +154,12 @@ public class Simulator {
 
             GearSet gearSet = setup.gearFor(position);
             for (int hit = 0; hit < champion.hitsPerCycle(); hit++) {
+                if (champion.kind() == ChampionKind.ATHEL
+                        && random.nextDouble() < ATHEL_WEAK_AFFINITY_FAILURE_CHANCE) {
+                    state.affinityFailed = true;
+                    return state;
+                }
+
                 applyChampionSkill(champion, position, hit, options, state, random);
 
                 if (position == TeamPosition.SLEEPER && gearSet == GearSet.DAZE
@@ -152,7 +173,7 @@ public class Simulator {
                         && options.failRunWithoutSleep()
                         && !state.sleepLanded) {
                     if (hit == champion.hitsPerCycle() - 1) {
-                        state.failed = true;
+                        state.sleepFailed = true;
                         return state;
                     }
                     continue;
@@ -171,7 +192,7 @@ public class Simulator {
             if (position == TeamPosition.SLEEPER
                     && options.failRunWithoutSleep()
                     && !state.sleepLanded) {
-                state.failed = true;
+                state.sleepFailed = true;
                 return state;
             }
         }
@@ -205,16 +226,7 @@ public class Simulator {
                         state.applyDebuff(position);
                     }
                 }
-                double smiteRoll = random.nextDouble();
-                boolean smiteLanded = options.smiteEnabled()
-                        && smiteRoll < options.smiteChance()
-                        && (options.smiteStars() == 6
-                        || !isResisted(champion, options, random))
-                        && !state.smiteLanded;
-                if (smiteLanded) {
-                    state.applyDebuff(position);
-                    state.smiteLanded = true;
-                }
+                applySmite(champion, position, options, state, random);
             }
             case ATHEL -> {
                 if (hit == champion.hitsPerCycle() - 1
@@ -223,8 +235,45 @@ public class Simulator {
                     state.weakenLanded = true;
                 }
             }
+            case DOROTHY -> {
+                if (hit == champion.hitsPerCycle() - 1
+                        && trySkillDebuff(1.0, champion, options, random)) {
+                    state.applyDebuff(position);
+                    state.weakenLanded = true;
+                }
+                applySmite(champion, position, options, state, random);
+            }
+            case WYSTERI_VINEGUARD -> {
+                double weakenChance = options.wysteriWeakenChance(position);
+                if (random.nextDouble() < weakenChance
+                        && !isResisted(champion, options, random)) {
+                    if (!state.weakenLanded) {
+                        state.applyDebuff(position);
+                        state.weakenLanded = true;
+                    }
+                }
+            }
             case MIKAGE, FENAX -> {
             }
+        }
+    }
+
+    private static void applySmite(
+            Champion champion,
+            TeamPosition position,
+            SimulationOptions options,
+            TrialState state,
+            Random random
+    ) {
+        double smiteRoll = random.nextDouble();
+        boolean smiteLanded = options.smiteEnabled()
+                && smiteRoll < options.smiteChance()
+                && (options.smiteStars() == 6
+                || !isResisted(champion, options, random))
+                && !state.smiteLanded;
+        if (smiteLanded) {
+            state.applyDebuff(position);
+            state.smiteLanded = true;
         }
     }
 
@@ -284,7 +333,7 @@ public class Simulator {
         }
 
         double weakenMultiplier = state.weakenLanded
-                ? 1.0 + ATHEL_WEAKEN_DAMAGE_BONUS
+                ? 1.0 + WEAKEN_DAMAGE_BONUS
                 : 1.0;
         return baseDamagePerCycle
                 * damageModel.damageMultiplier(state.debuffsLanded)
@@ -298,7 +347,8 @@ public class Simulator {
         private boolean sleepLanded;
         private boolean weakenLanded;
         private boolean smiteLanded;
-        private boolean failed;
+        private boolean sleepFailed;
+        private boolean affinityFailed;
 
         private void applyDebuff(TeamPosition position) {
             debuffsLanded++;

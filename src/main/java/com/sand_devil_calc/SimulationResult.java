@@ -6,6 +6,9 @@ public record SimulationResult(
         String setupName,
         long trials,
         long successfulTrials,
+        long sleepFailedTrials,
+        long affinityFailedTrials,
+        long damageSampleTrials,
         double baseDamagePerCycle,
         double averageDamagePerCycle,
         double damageStandardDeviation,
@@ -14,10 +17,6 @@ public record SimulationResult(
 ) {
     public SimulationResult {
         debuffCountProbabilities = Map.copyOf(debuffCountProbabilities);
-    }
-
-    public long sleepFailedTrials() {
-        return trials - successfulTrials;
     }
 
     public double successRate() {

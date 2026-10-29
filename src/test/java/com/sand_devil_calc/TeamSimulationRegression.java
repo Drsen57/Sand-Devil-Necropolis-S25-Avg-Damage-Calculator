@@ -15,6 +15,9 @@ public class TeamSimulationRegression {
         verifySleepSingletonAndSuccessfulRunAverages();
         verifySporeburstRodAndSmite();
         verifyAthelWeaken();
+        verifyAthelWeakAffinityLossesAreZeroDamageSamples();
+        verifyDorothyWeakenSmiteAndToxic();
+        verifyWysteriRunesSniperWeakenAndToxic();
         System.out.println("Team simulation checks passed.");
     }
 
@@ -384,6 +387,170 @@ public class TeamSimulationRegression {
             throw new AssertionError("Athel must apply Weaken only on her third hit.");
         }
         assertClose(3.865625, result.averageDamagePerCycle(), "Athel Weaken damage bonus");
+    }
+
+    private static void verifyAthelWeakAffinityLossesAreZeroDamageSamples() {
+        Team athelTeam = team(
+                new Champion("Hellhound", ChampionKind.HELLHOUND, true, 1, 1, 114),
+                new Champion("Athel", ChampionKind.ATHEL, true, 3, 1, 114)
+        );
+        SimulationOptions assumeSleep = new SimulationOptions(
+                true, true, 0, Set.of(), Set.of(), true, false, false, 3, false, 3
+        );
+        Simulator simulator = new Simulator(new DamageModel(0.75, 0.15));
+        GearSetup noGear = new GearSetup("No gear", Map.of());
+
+        SimulationResult affinityLoss = simulator.run(
+                1,
+                athelTeam,
+                noGear,
+                assumeSleep,
+                new FixedRandom(0.1)
+        );
+        if (affinityLoss.affinityFailedTrials() != 1
+                || affinityLoss.successfulTrials() != 0
+                || affinityLoss.damageSampleTrials() != 1) {
+            throw new AssertionError("Athel weak affinity must end and count the run.");
+        }
+        assertClose(0, affinityLoss.averageDamagePerCycle(), "Athel affinity-failed run damage");
+
+        SimulationResult mixedRuns = simulator.run(
+                2,
+                athelTeam,
+                noGear,
+                assumeSleep,
+                new SequenceRandom(
+                        0.1, 0.1, 0.1,
+                        0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9
+                )
+        );
+        if (mixedRuns.affinityFailedTrials() != 1
+                || mixedRuns.successfulTrials() != 1
+                || mixedRuns.damageSampleTrials() != 2) {
+            throw new AssertionError("Athel affinity losses must remain in the damage average.");
+        }
+        assertClose(1.58125, mixedRuns.averageDamagePerCycle(), "Athel damage average including failed run");
+        assertClose(1.58125, mixedRuns.damageStandardDeviation(), "Athel SD including failed run");
+        assertClose(2, mixedRuns.averageDebuffs(), "Athel debuffs from completed runs");
+    }
+
+    private static void verifyDorothyWeakenSmiteAndToxic() {
+        Team dorothyTeam = team(
+                new Champion("Hellhound", ChampionKind.HELLHOUND, true, 1, 1, 114),
+                new Champion("Dorothy", ChampionKind.DOROTHY, true, 1, 1, 114)
+        );
+        GearSetup toxic = new GearSetup(
+                "Dorothy Toxic",
+                Map.of(TeamPosition.DEBUFFER, GearSet.TOXIC)
+        );
+        SimulationResult landed = new Simulator(new DamageModel(0.75, 0.15)).run(
+                1,
+                dorothyTeam,
+                toxic,
+                options(true, 0, false, false, false, 4, true, 5),
+                new SequenceRandom(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+        );
+        if (landed.averageDebuffs() != 5) {
+            throw new AssertionError("Dorothy must apply Weaken, five-star Smite, and Toxic after Hellhound sleep.");
+        }
+        assertClose(2.3828125, landed.averageDamagePerCycle(), "Dorothy Weaken damage bonus");
+
+        Team lowAccuracyDorothy = team(
+                new Champion("Hellhound", ChampionKind.HELLHOUND, true, 1, 1, 114),
+                new Champion("Dorothy", ChampionKind.DOROTHY, true, 1, 1, 0)
+        );
+        SimulationResult resisted = new Simulator(new DamageModel(0.75, 0.15)).run(
+                1,
+                lowAccuracyDorothy,
+                toxic,
+                new SimulationOptions(
+                        true, true, 1_000, Set.of(), Set.of(), true, false, false, 4, true, 5
+                ),
+                new SequenceRandom(0.9, 0.9, 0.5, 0.0, 0.0, 0.9)
+        );
+        if (resisted.averageDebuffs() != 1) {
+            throw new AssertionError("Dorothy's Weaken and Smite must both be resistable.");
+        }
+    }
+
+    private static void verifyWysteriRunesSniperWeakenAndToxic() {
+        Team wysteriTeam = team(
+                new Champion("Hellhound", ChampionKind.HELLHOUND, true, 1, 1, 114),
+                new Champion("Wysteri Vineguard", ChampionKind.WYSTERI_VINEGUARD, true, 2, 1, 0)
+        );
+        GearSetup toxic = new GearSetup(
+                "Wysteri Toxic",
+                Map.of(TeamPosition.DEBUFFER, GearSet.TOXIC)
+        );
+        SimulationOptions oneRuneWithSniper = new SimulationOptions(
+                true,
+                true,
+                0,
+                Set.of(),
+                Set.of(TeamPosition.DEBUFFER),
+                true,
+                false,
+                false,
+                4,
+                true,
+                5,
+                1
+        );
+        assertClose(
+                0.85,
+                oneRuneWithSniper.wysteriWeakenChance(TeamPosition.DEBUFFER),
+                "Wysteri Sniper plus one Weaken rune chance"
+        );
+        assertClose(
+                0.90,
+                new SimulationOptions(
+                        true, true, 0, Set.of(), Set.of(TeamPosition.DEBUFFER),
+                        true, false, false, 4, false, 3, 2
+                ).wysteriWeakenChance(TeamPosition.DEBUFFER),
+                "Wysteri Sniper plus two Weaken runes chance"
+        );
+
+        SimulationResult landedOnce = new Simulator(new DamageModel(0.75, 0.15)).run(
+                1,
+                wysteriTeam,
+                toxic,
+                oneRuneWithSniper,
+                new SequenceRandom(0.9, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+        );
+        if (landedOnce.averageDebuffs() != 4) {
+            throw new AssertionError(
+                    "Wysteri should land at most one singleton Weaken, plus Hellhound sleep and Toxic procs."
+            );
+        }
+
+        SimulationOptions oneRuneNoSniper = new SimulationOptions(
+                true, true, 0, Set.of(), Set.of(), true, false, false, 4, false, 3, 1
+        );
+        assertClose(
+                0.80,
+                oneRuneNoSniper.wysteriWeakenChance(TeamPosition.DEBUFFER),
+                "Wysteri one rune without Sniper chance"
+        );
+
+        SimulationResult resisted = new Simulator(new DamageModel(0.75, 0.15)).run(
+                1,
+                wysteriTeam,
+                new GearSetup("No gear", Map.of()),
+                new SimulationOptions(
+                        true, true, 1_000, Set.of(), Set.of(), true, false, false, 4, false, 3, 0
+                ),
+                new SequenceRandom(0.9, 0.5, 0.0, 0.5, 0.5, 0.5, 0.5, 0.5)
+        );
+        if (resisted.averageDebuffs() != 1) {
+            throw new AssertionError("Wysteri's Weaken must be resistable.");
+        }
+
+        expectIllegalArgument(
+                () -> new SimulationOptions(
+                        true, true, 0, Set.of(), Set.of(), true, false, false, 4, false, 3, 3
+                ),
+                "Wysteri cannot equip more than two Weaken runes."
+        );
     }
 
     private static Team team(Champion sleeper, Champion debuffer) {

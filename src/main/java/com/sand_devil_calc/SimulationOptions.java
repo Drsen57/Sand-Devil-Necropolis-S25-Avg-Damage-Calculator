@@ -13,8 +13,38 @@ public record SimulationOptions(
         boolean sporeburstRodEnabled,
         int sporeburstRodStars,
         boolean smiteEnabled,
-        int smiteStars
+        int smiteStars,
+        int wysteriWeakenRunes
 ) {
+    public SimulationOptions(
+            boolean failRunWithoutSleep,
+            boolean assumeHellhoundSleepLands,
+            double bossResistance,
+            Set<TeamPosition> fearsomePresencePositions,
+            Set<TeamPosition> sniperMasteryPositions,
+            boolean hellhoundHarvestDespairEnabled,
+            boolean hellhoundHarvestDespairSniperEnabled,
+            boolean sporeburstRodEnabled,
+            int sporeburstRodStars,
+            boolean smiteEnabled,
+            int smiteStars
+    ) {
+        this(
+                failRunWithoutSleep,
+                assumeHellhoundSleepLands,
+                bossResistance,
+                fearsomePresencePositions,
+                sniperMasteryPositions,
+                hellhoundHarvestDespairEnabled,
+                hellhoundHarvestDespairSniperEnabled,
+                sporeburstRodEnabled,
+                sporeburstRodStars,
+                smiteEnabled,
+                smiteStars,
+                0
+        );
+    }
+
     public SimulationOptions {
         if (!Double.isFinite(bossResistance) || bossResistance < 0) {
             throw new IllegalArgumentException("Boss resistance must be finite and non-negative.");
@@ -26,6 +56,9 @@ public record SimulationOptions(
         sniperMasteryPositions = Set.copyOf(sniperMasteryPositions);
         validateStars("Sporeburst Rod", sporeburstRodStars);
         validateStars("Smite", smiteStars);
+        if (wysteriWeakenRunes < 0 || wysteriWeakenRunes > 2) {
+            throw new IllegalArgumentException("Wysteri Weaken runes must be between 0 and 2.");
+        }
     }
 
     private static void validateStars(String label, int stars) {
@@ -54,5 +87,10 @@ public record SimulationOptions(
 
     public boolean sniperMasteryEnabled(TeamPosition position) {
         return sniperMasteryPositions.contains(position);
+    }
+
+    public double wysteriWeakenChance(TeamPosition position) {
+        double chance = sniperMasteryEnabled(position) ? 0.80 : 0.75;
+        return chance + 0.05 * wysteriWeakenRunes;
     }
 }

@@ -5,5 +5,7 @@ public enum ChampionKind {
     HELLHOUND,
     MITHRALA,
     ATHEL,
+    DOROTHY,
+    WYSTERI_VINEGUARD,
     FENAX
 }
