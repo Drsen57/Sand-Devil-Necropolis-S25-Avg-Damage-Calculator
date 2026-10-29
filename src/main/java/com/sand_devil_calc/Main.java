@@ -243,7 +243,7 @@ public class Main {
 
         }
 
-        System.out.print("\nAverage damage dealt with toxic: " + (toxicDamageDealtArray.stream().mapToDouble(Double::doubleValue).average().orElse(0) * 100) + "%");
+        printDamageStatistics("Toxic", toxicDamageDealtArray);
 
         System.out.print("\nChance of 1 debuff with toxic: " + (oneDebuffArrayToxic.stream().mapToDouble(Double::doubleValue).average().orElse(0) * 100) + "%");
         System.out.print("\nChance of 2 debuffs with toxic: " + (twoDebuffArrayToxic.stream().mapToDouble(Double::doubleValue).average().orElse(0) * 100) + "%");
@@ -257,7 +257,8 @@ public class Main {
         System.out.print("\nChance of 10 debuffs with toxic: " + (tenDebuffArrayToxic.stream().mapToDouble(Double::doubleValue).average().orElse(0) * 100) + "%");
 
 
-        System.out.print("\n\nAverage damage dealt with feral: " + (feralDamageDealtArray.stream().mapToDouble(Double::doubleValue).average().orElse(0) * 100) + "%");
+        System.out.println();
+        printDamageStatistics("Feral", feralDamageDealtArray);
         
         System.out.print("\nChance of 1 debuff with feral: " + (oneDebuffArrayFeral.stream().mapToDouble(Double::doubleValue).average().orElse(0) * 100) + "%");
         System.out.print("\nChance of 2 debuffs with feral: " + (twoDebuffArrayFeral.stream().mapToDouble(Double::doubleValue).average().orElse(0) * 100) + "%");
@@ -271,5 +272,37 @@ public class Main {
         System.out.print("\nChance of 10 debuffs with feral: " + (tenDebuffArrayFeral.stream().mapToDouble(Double::doubleValue).average().orElse(0) * 100) + "%");
 
         System.out.println();
-        }
+    }
+
+    private static double populationStandardDeviation(ArrayList<Double> values) {
+        double mean = values.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+        double meanSquaredDeviation = values.stream()
+                .mapToDouble(value -> Math.pow(value - mean, 2))
+                .average()
+                .orElse(0);
+        return Math.sqrt(meanSquaredDeviation);
+    }
+
+    private static void printDamageStatistics(String setup, ArrayList<Double> damages) {
+        double average = damages.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+        double standardDeviation = populationStandardDeviation(damages);
+
+        System.out.printf("%n%s damage statistics:%n", setup);
+        System.out.printf("  Average: %.2f%%%n", average * 100);
+        System.out.printf(
+                "  1 standard deviation range (average +/- 1 SD): %.2f%% to %.2f%%%n",
+                (average - standardDeviation) * 100,
+                (average + standardDeviation) * 100
+        );
+        System.out.printf(
+                "  2 standard deviations range (average +/- 2 SD): %.2f%% to %.2f%%%n",
+                (average - 2 * standardDeviation) * 100,
+                (average + 2 * standardDeviation) * 100
+        );
+        System.out.printf(
+                "  3 standard deviations range (average +/- 3 SD): %.2f%% to %.2f%%%n",
+                (average - 3 * standardDeviation) * 100,
+                (average + 3 * standardDeviation) * 100
+        );
+    }
 }
