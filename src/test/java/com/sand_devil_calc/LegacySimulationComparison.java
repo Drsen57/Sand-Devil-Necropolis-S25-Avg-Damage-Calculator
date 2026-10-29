@@ -1,5 +1,11 @@
 package com.sand_devil_calc;
 
+import com.sand_devil_calc.legacy.Champion;
+import com.sand_devil_calc.legacy.DamageModel;
+import com.sand_devil_calc.legacy.GearSet;
+import com.sand_devil_calc.legacy.GearSetup;
+import com.sand_devil_calc.legacy.SimulationResult;
+import com.sand_devil_calc.legacy.Simulator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,7 +24,7 @@ public class LegacySimulationComparison {
                 "Mithrala", true, 2, 1.0, 0, 0.97, 1, 0.25,
                 0.30, 0.97, 0.80, 0.05, false
         );
-        Simulator simulator = new Simulator(new DamageModel(0.15));
+        Simulator simulator = new Simulator(new DamageModel(0.75, 0.15));
 
         compareSetup(
                 simulator,
@@ -34,7 +40,7 @@ public class LegacySimulationComparison {
                 "Hellhound Toxic / Mithrala Feral",
                 GearSet.FERAL
         );
-        System.out.println("Original and refactored simulations match for all fixed-seed trials.");
+        System.out.println("Historical legacy simulation matches corrected v1 for all fixed-seed trials.");
     }
 
     private static void compareSetup(
@@ -67,18 +73,39 @@ public class LegacySimulationComparison {
                 original.averageDebuffs(),
                 refactored.averageDebuffs()
         );
+        System.out.printf(
+                "  Original damage SD: %.12f; refactored: %.12f%n",
+                original.damageStandardDeviation(),
+                refactored.damageStandardDeviation()
+        );
 
-        if (Double.compare(original.averageDamagePerCycle(), refactored.averageDamagePerCycle()) != 0
-                || Double.compare(original.averageDebuffs(), refactored.averageDebuffs()) != 0
+        if (!approximatelyEqual(
+                        original.averageDamagePerCycle(),
+                        refactored.averageDamagePerCycle())
+                || !approximatelyEqual(
+                        original.damageStandardDeviation(),
+                        refactored.damageStandardDeviation())
+                || !approximatelyEqual(
+                        original.averageDebuffs(),
+                        refactored.averageDebuffs())
                 || !original.debuffCountProbabilities().equals(
                         refactored.debuffCountProbabilities())) {
-            throw new AssertionError("Results differ for setup: " + setupName);
+            throw new AssertionError(
+                    "Results differ for setup: " + setupName
+                            + "\nOriginal distribution: " + original.debuffCountProbabilities()
+                            + "\nRefactored distribution: " + refactored.debuffCountProbabilities()
+            );
         }
+    }
+
+    private static boolean approximatelyEqual(double first, double second) {
+        return Math.abs(first - second) <= 1e-12;
     }
 
     private static LegacyResult runOriginal(long seed, boolean mithralaUsesToxic) {
         Random random = new Random(seed);
-        double totalDamage = 0;
+        double averageDamage = 0;
+        double sumSquaredDamageDeviations = 0;
         long totalDebuffs = 0;
         Map<Integer, Long> counts = new HashMap<>();
 
@@ -118,7 +145,7 @@ public class LegacySimulationComparison {
             int baseDebuffs = hellhoundDebuffs + mithralaDebuffs;
             int totalToxicDebuffs = baseDebuffs
                     + (mithralaUsesToxic ? mithralaToxicDebuffs : 0);
-            double damageReduction = Math.max(1.0 - 0.15 * baseDebuffs, 0.0);
+            double damageReduction = 0.75 * Math.max(1.0 - 0.15 * baseDebuffs, 0.0);
             double damageMultiplier = 1.0 - damageReduction
                     * Math.max(1.0 - 0.15 * totalToxicDebuffs, 0.0);
 
@@ -126,7 +153,10 @@ public class LegacySimulationComparison {
                 damageMultiplier *= 1.0 + 0.05 * mithralaDebuffs;
             }
 
-            totalDamage += 3.0 * damageMultiplier;
+            double trialDamage = 3.0 * damageMultiplier;
+            double deltaFromAverage = trialDamage - averageDamage;
+            averageDamage += deltaFromAverage / (trial + 1);
+            sumSquaredDamageDeviations += deltaFromAverage * (trialDamage - averageDamage);
             totalDebuffs += totalToxicDebuffs;
             counts.merge(totalToxicDebuffs, 1L, Long::sum);
         }
@@ -137,7 +167,8 @@ public class LegacySimulationComparison {
         }
 
         return new LegacyResult(
-                totalDamage / TRIALS,
+                averageDamage,
+                Math.sqrt(sumSquaredDamageDeviations / TRIALS),
                 (double) totalDebuffs / TRIALS,
                 probabilities
         );
@@ -145,6 +176,7 @@ public class LegacySimulationComparison {
 
     private record LegacyResult(
             double averageDamagePerCycle,
+            double damageStandardDeviation,
             double averageDebuffs,
             Map<Integer, Double> debuffCountProbabilities
     ) {
